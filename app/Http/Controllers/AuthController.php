@@ -8,12 +8,14 @@ use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function register(Request $request){
+    public function register(Request $request)
+    {
         $request->validate([
             'name' => 'required|string',
             'email' => 'required|email|unique:users',
             'password' => 'required|min:6',
-            'role' => 'required'
+            'role' => 'required',
+            'shop_name' => 'nullable|string'
         ]);
 
         $user = User::create([
@@ -32,16 +34,19 @@ class AuthController extends Controller
         ]);
     }
 
-    public function login(Request $request){
+    public function login(Request $request)
+    {
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::make($request->password, $user->password)){
+        // Gunakan Hash::check, bukan Hash::make
+        if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json(['message' => 'Email atau Password salah'], 401);
         }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
-            'access_token' =>$token,
+            'access_token' => $token,
             'user' => $user
         ]);
     }

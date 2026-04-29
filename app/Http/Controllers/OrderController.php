@@ -2,57 +2,45 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Product;
 use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
-    public function store(Request $request)
+    // GET /api/orders
+    // Partner melihat semua pesanan untuk produk yang dimiliki toko-nya
+    public function index(Request $request)
     {
-        $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1',
-        ]);
+        $user = $request->user();
 
-        $product = Product::findOrFail($request->product_id);
-
-        // Cek stok cukup
-        if ($product->stock < $request->quantity) {
-            return response()->json([
-                'message' => 'Stok tidak mencukupi'
-            ], 422);
-        }
-
-        // Hitung total harga
-        $totalPrice = $product->surplus_price * $request->quantity;
-
-        // Buat order, user_id dari token login
-        $order = Order::create([
-            'user_id' => $request->user()->id,
-            'product_id' => $request->product_id,
-            'quantity' => $request->quantity,
-            'total_price' => $totalPrice,
-            'status' => 'Diproses',
-        ]);
-
-        // Kurangi stok otomatis
-        $product->decrement('stock', $request->quantity);
-
-        return response()->json([
-            'message' => 'Pesanan berhasil dibuat',
-            'order' => $order->load('product')
-        ], 201);
-    }
-
-    // Ambil pesanan milik user yang sedang login
-    public function myOrders(Request $request)
-    {
         $orders = Order::with('product')
-            ->where('user_id', $request->user()->id)
-            ->latest()
+            ->whereHas('product', function ($q) use ($user) {
+                $q->where('seller', $user->shop_name);
+            })
+            ->orderBy('created_at', 'desc')
             ->get();
 
-        return response()->json($orders);
+        return response()->json(['data' => $orders]);
+    }
+
+    // PUT /api/orders/{id}  — update status saja
+    public function update(Request $request, $id)
+    {
+        $order = Order::with('product')->findOrFail($id);
+
+        // Pastikan pesanan ini memang untuk produk milik Partner yang login
+        if ($order->product->seller !== $request->user()->shop_name) {
+            abort(403, 'Akses ditolak.');
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|in:Diproses,Selesai,Dibatalkan',
+        ]);
+
+        $order->update($validated);
+
+        return response()->json(['data' => $order->fresh('product')]);
     }
 }

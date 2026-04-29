@@ -1,38 +1,33 @@
 <?php
-// routes/api.php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ProductController;
-use App\Http\Controllers\OrderController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\AdminController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\UserController;
+use Illuminate\Support\Facades\Route;
 
-// ── PUBLIC ────────────────────────────────────────────────
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
-Route::get('/foods', [ProductController::class, 'index']);
+// ── Public routes (tidak perlu token) ─────────
+Route::post('/login',  [AuthController::class, 'login']);
 
-// ── AUTHENTICATED (semua role) ────────────────────────────
+// ── Protected routes (perlu Sanctum token) ────
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/user', fn(Request $r) => $r->user());
 
-    // Orders — wajib login
-    Route::post('/orders', [OrderController::class, 'store']);
-    Route::get('/orders/mine', [OrderController::class, 'myOrders']);
+    // Auth
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/user',    [UserController::class, 'me']);
+
+    // Produk — hanya Partner & Admin
+    Route::middleware('role:partner,admin')->group(function () {
+        Route::apiResource('products', ProductController::class);
+    });
+
+    // Pesanan — hanya Partner & Admin
+    Route::middleware('role:partner,admin')->group(function () {
+        Route::get('orders',        [OrderController::class, 'index']);
+        Route::put('orders/{id}',   [OrderController::class, 'update']);
+    });
+
+    // Update lokasi toko
+    Route::patch('/user/location', [UserController::class, 'updateLocation'])
+         ->middleware('role:partner,admin');
 });
-
-// ── PARTNER ONLY ──────────────────────────────────────────
-Route::middleware(['auth:sanctum', 'role:partner'])->group(function () {
-    Route::post('/products', [ProductController::class, 'store']);
-    Route::get('/products/mine', [ProductController::class, 'myProducts']);
-});
-
-// ── ADMIN ONLY ────────────────────────────────────────────
-Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-    Route::get('/admin/stats', [AdminController::class, 'getDashboardStats']);
-});
-
-Route::get('/email/verify', function () {
-    return view('auth.verify-email');
-})->middleware('auth')->name('verification.notice');

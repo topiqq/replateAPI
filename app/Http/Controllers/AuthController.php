@@ -2,52 +2,53 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    public function register(Request $request)
+    // POST /api/login
+    public function login(Request $request)
     {
         $request->validate([
-            'name' => 'required|string',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|min:6',
-            'role' => 'required',
-            'shop_name' => 'nullable|string'
+            'email'    => 'required|email',
+            'password' => 'required|string',
         ]);
 
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'shop_name' => $request->shop_name,
-        ]);
+        $user = User::where('email', $request->email)->first();
 
+        if (! $user || ! Hash::check($request->password, $user->password)) {
+            throw ValidationException::withMessages([
+                'email' => ['Email atau password salah.'],
+            ]);
+        }
+
+        // Hapus token lama, buat yang baru (1 session aktif)
+        $user->tokens()->delete();
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
-            'access_token' => $token,
-            'user' => $user
+            'token' => $token,
+            'user'  => [
+                'id'        => $user->id,
+                'name'      => $user->name,
+                'email'     => $user->email,
+                'role'      => $user->role,
+                'shop_name' => $user->shop_name,
+                'latitude'  => $user->latitude  ?? null,
+                'longitude' => $user->longitude ?? null,
+            ],
         ]);
     }
 
-    public function login(Request $request)
+    // POST /api/logout
+    public function logout(Request $request)
     {
-        $user = User::where('email', $request->email)->first();
+        $request->user()->currentAccessToken()->delete();
 
-        // Gunakan Hash::check, bukan Hash::make
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json(['message' => 'Email atau Password salah'], 401);
-        }
-
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return response()->json([
-            'access_token' => $token,
-            'user' => $user
-        ]);
+        return response()->json(['message' => 'Berhasil keluar.']);
     }
 }

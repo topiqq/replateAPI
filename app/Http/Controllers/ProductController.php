@@ -33,6 +33,7 @@ class ProductController extends Controller
         ]);
 
         $validated['seller'] = $request->user()->shop_name;
+        $validated['user_id'] = $request->user()->id;
 
         $product = Product::create($validated);
 
